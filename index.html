@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Advanced Stopwatch</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .time-display {
+            font-family: 'Roboto Mono', monospace;
+        }
+        /* Light Theme (Default) */
+        body.light {
+            background-color: #f0f2f5;
+            color: #1a202c;
+        }
+        .light .main-container { background-color: #ffffff; }
+        .light .lap-item { background-color: #f7fafc; }
+        .light #laps-container { border-color: #e2e8f0; }
+        .light .shortcut-hint { color: #7aafff; }
+
+        /* Dark Theme */
+        body.dark {
+            background-color: #1a202c;
+            color: #e2e8f0;
+        }
+        .dark .main-container { background-color: #2d3748; }
+        .dark .time-display, .dark .lap-analysis-value { color: #ffffff; }
+        .dark #laps-container { border-color: #4a5568; }
+        .dark .lap-item { background-color: #4a5568; }
+        .dark .lap-item.fastest { background-color: #2f855a; color: white; }
+        .dark .lap-item.slowest { background-color: #c53030; color: white; }
+        .dark .shortcut-hint { color: #a0aec0; }
+        .dark #theme-toggle svg { color: #f7fafc; }
+
+        .lap-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .lap-item.fastest { background-color: #c6f6d5; }
+        .lap-item.slowest { background-color: #fed7d7; }
+    </style>
+</head>
+<body class="light">
+
+    <div class="main-container w-full max-w-md mx-auto rounded-2xl shadow-lg p-8 my-8">
+        <!-- Theme Toggle -->
+        <button id="theme-toggle" class="absolute top-4 right-4 p-2 rounded-full hover:bg-gray-200 dark:hover:bg-gray-700 transition">
+            <svg class="h-6 w-6 text-gray-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z" />
+            </svg>
+        </button>
+
+        <!-- Analog Clock -->
+        <canvas id="analog-clock" width="200" height="200" class="mx-auto mb-4"></canvas>
+
+        <!-- Digital Display -->
+        <div id="display" class="time-display text-5xl font-bold text-center mb-6">
+            00:00:00
+        </div>
+
+        <!-- Control Buttons -->
+        <div class="flex justify-center gap-4 mb-6">
+            <button id="start-btn" class="w-24 bg-green-500 hover:bg-green-600 text-white font-semibold py-3 px-4 rounded-lg transition">Start</button>
+            <button id="pause-btn" class="w-24 bg-red-500 hover:bg-red-600 text-white font-semibold py-3 px-4 rounded-lg transition hidden">Pause</button>
+            <button id="reset-btn" class="w-24 bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-4 rounded-lg transition">Reset</button>
+            <button id="lap-btn" class="w-24 bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-4 rounded-lg transition" disabled>Lap</button>
+        </div>
+
+        <!-- Laps Section -->
+        <div id="laps-container" class="border-t pt-4">
+            <div class="flex justify-between items-center mb-2">
+                <h3 class="text-lg font-semibold">Laps</h3>
+                <button id="export-btn" class="text-sm bg-gray-200 dark:bg-gray-600 px-3 py-1 rounded-md hover:bg-gray-300 dark:hover:bg-gray-500 transition" disabled>Export CSV</button>
+            </div>
+             <!-- Lap Analysis -->
+            <div id="lap-analysis" class="text-xs flex justify-around mb-2 hidden">
+                <div>Fastest: <span id="fastest-lap" class="font-semibold lap-analysis-value">N/A</span></div>
+                <div>Slowest: <span id="slowest-lap" class="font-semibold lap-analysis-value">N/A</span></div>
+            </div>
+            <ul id="laps-list" class="space-y-2 max-h-40 overflow-y-auto pr-2"></ul>
+        </div>
+        
+        <!-- Keyboard Shortcuts Hint -->
+        <p class="shortcut-hint text-center text-xs mt-4">
+            Use <kbd class="font-mono p-1 bg-gray-200 dark:bg-gray-600 rounded">Space</kbd> to Start/Pause, <kbd class="font-mono p-1 bg-gray-200 dark:bg-gray-600 rounded">L</kbd> for Lap, <kbd class="font-mono p-1 bg-gray-200 dark:bg-gray-600 rounded">R</kbd> to Reset.
+        </p>
+        
+        <footer class="text-center text-xs text-gray-400 mt-6">
+            Built by Aditya
+        </footer>
+    </div>
+
+    <script>
+        // Sab kuch tabhi chalega jab page load ho jaayega
+        document.addEventListener('DOMContentLoaded', () => {
+            // Sare important elements ko pakad lo
+            const display = document.getElementById('display');
+            const startBtn = document.getElementById('start-btn');
+            const pauseBtn = document.getElementById('pause-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const lapBtn = document.getElementById('lap-btn');
+            const exportBtn = document.getElementById('export-btn');
+            const lapsList = document.getElementById('laps-list');
+            const themeToggle = document.getElementById('theme-toggle');
+            const lapAnalysisEl = document.getElementById('lap-analysis');
+            const fastestLapEl = document.getElementById('fastest-lap');
+            const slowestLapEl = document.getElementById('slowest-lap');
+
+            // Analog clock ka setup
+            const canvas = document.getElementById('analog-clock');
+            const ctx = canvas.getContext('2d');
+            const radius = canvas.height / 2;
+            ctx.translate(radius, radius);
+
+            // Time aur laps ka data yahan store hoga
+            let startTime = 0, elapsedTime = 0, timerInterval;
+            let laps = [];
+
+            // Time ko achhe se format karne ka function
+            function formatTime(time) {
+                const date = new Date(time);
+                const hours = String(date.getUTCHours()).padStart(2, '0');
+                const minutes = String(date.getUTCMinutes()).padStart(2, '0');
+                const seconds = String(date.getUTCSeconds()).padStart(2, '0');
+                return `${hours}:${minutes}:${seconds}`;
+            }
+
+            // Display ko update karte raho, warna user bore ho jayega
+            function updateDisplay() {
+                elapsedTime = Date.now() - startTime;
+                display.textContent = formatTime(elapsedTime);
+                drawClock();
+            }
+
+            // Timer ko start karo, par agar already chal raha hai toh kuch mat karo
+            function startTimer() {
+                if (timerInterval) return;
+                startTime = Date.now() - elapsedTime;
+                timerInterval = setInterval(updateDisplay, 100); // Thoda smooth feel aayega
+                startBtn.classList.add('hidden');
+                pauseBtn.classList.remove('hidden');
+                lapBtn.disabled = false;
+            }
+
+            // Pause karne ka kaam, simple hai
+            function pauseTimer() {
+                clearInterval(timerInterval);
+                timerInterval = null;
+                startBtn.classList.remove('hidden');
+                pauseBtn.classList.add('hidden');
+            }
+
+            // Sab kuch reset kar do, fresh start
+            function resetTimer() {
+                pauseTimer();
+                elapsedTime = 0;
+                laps = [];
+                display.textContent = '00:00:00';
+                lapsList.innerHTML = '';
+                lapBtn.disabled = true;
+                exportBtn.disabled = true;
+                lapAnalysisEl.classList.add('hidden');
+                drawClock();
+            }
+
+            // Laps ka analysis, fastest aur slowest dikhana hai
+            function analyzeLaps() {
+                if (laps.length < 2) {
+                    lapAnalysisEl.classList.add('hidden');
+                    return;
+                }
+                const lapTimes = laps.map(l => l.time);
+                const fastest = Math.min(...lapTimes);
+                const slowest = Math.max(...lapTimes);
+                fastestLapEl.textContent = formatTime(fastest);
+                slowestLapEl.textContent = formatTime(slowest);
+                lapAnalysisEl.classList.remove('hidden');
+
+                // Fastest aur slowest ko highlight karo
+                document.querySelectorAll('.lap-item').forEach(item => {
+                    item.classList.remove('fastest', 'slowest');
+                    const itemTime = parseInt(item.dataset.time);
+                    if (itemTime === fastest) item.classList.add('fastest');
+                    if (itemTime === slowest) item.classList.add('slowest');
+                });
+            }
+
+            // Jab bhi user lap dabaye, naya lap add karo
+            function recordLap() {
+                // Pehle wale laps ka total nikal lo
+                const totalLapTime = laps.reduce((acc, lap) => acc + lap.time, 0);
+                const currentLapTime = elapsedTime - totalLapTime;
+                laps.push({ id: laps.length + 1, time: currentLapTime });
+                
+                // List me lap dikhana hai
+                const li = document.createElement('li');
+                li.className = 'lap-item p-2 rounded-md';
+                li.dataset.time = currentLapTime;
+                li.innerHTML = `<span>Lap ${laps.length}</span><span class="font-mono">${formatTime(currentLapTime)}</span>`;
+                lapsList.prepend(li);
+                
+                exportBtn.disabled = false;
+                analyzeLaps();
+            }
+
+            // Laps ko CSV me export karne ka jugaad
+            function exportLapsToCSV() {
+                let csvContent = "data:text/csv;charset=utf-8,Lap,Time\n";
+                laps.forEach(lap => {
+                    csvContent += `${lap.id},${formatTime(lap.time)}\n`;
+                });
+                const encodedUri = encodeURI(csvContent);
+                const link = document.createElement("a");
+                link.setAttribute("href", encodedUri);
+                link.setAttribute("download", "stopwatch_laps.csv");
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+
+            // Clock ke hands ko ghumane ka kaam
+            function drawHand(ctx, pos, length, width, color) {
+                ctx.beginPath();
+                ctx.lineWidth = width;
+                ctx.lineCap = "round";
+                ctx.strokeStyle = color;
+                ctx.moveTo(0, 0);
+                ctx.rotate(pos);
+                ctx.lineTo(0, -length);
+                ctx.stroke();
+                ctx.rotate(-pos);
+            }
+
+            // Analog clock ka pura scene yahan
+            function drawClock() {
+                ctx.clearRect(-radius, -radius, canvas.width, canvas.height);
+                const isDark = document.body.classList.contains('dark');
+
+                // Clock ka face
+                ctx.beginPath();
+                ctx.arc(0, 0, radius * 0.95, 0, 2 * Math.PI);
+                ctx.fillStyle = isDark ? '#2d3748' : '#ffffff';
+                ctx.fill();
+                ctx.strokeStyle = isDark ? '#4a5568' : '#e2e8f0';
+                ctx.lineWidth = 4;
+                ctx.stroke();
+
+                // Center pin bhi zaroori hai
+                ctx.beginPath();
+                ctx.arc(0, 0, radius * 0.05, 0, 2 * Math.PI);
+                ctx.fillStyle = isDark ? '#e2e8f0' : '#1a202c';
+                ctx.fill();
+
+                // Ticks aur numbers, bina iske clock adhura hai
+                ctx.font = radius * 0.15 + "px Inter";
+                ctx.textBaseline = "middle";
+                ctx.textAlign = "center";
+                for (let i = 1; i <= 12; i++) {
+                    const angle = (i / 12) * 2 * Math.PI;
+                    ctx.beginPath();
+                    ctx.rotate(angle);
+                    ctx.moveTo(0, -radius * 0.85);
+                    ctx.lineWidth = 3;
+                    ctx.lineTo(0, -radius * 0.75);
+                    ctx.fillStyle = isDark ? '#e2e8f0' : '#1a202c';
+                    ctx.fillText(i.toString(), 0, -radius * 0.65);
+                    ctx.strokeStyle = isDark ? '#a0aec0' : '#718096';
+                    ctx.stroke();
+                    ctx.rotate(-angle);
+                }
+
+                // Hands ko ghumao, time ke hisaab se
+                const hours = (elapsedTime / (1000 * 60 * 60)) % 12;
+                const minutes = (elapsedTime / (1000 * 60)) % 60;
+                const seconds = (elapsedTime / 1000) % 60;
+                
+                const hourAngle = ((hours + minutes / 60) / 12) * 2 * Math.PI - Math.PI / 2;
+                const minuteAngle = ((minutes + seconds / 60) / 60) * 2 * Math.PI - Math.PI / 2;
+                const secondAngle = (seconds / 60) * 2 * Math.PI - Math.PI / 2;
+
+                drawHand(ctx, hourAngle, radius * 0.5, 6, isDark ? '#e2e8f0' : '#2d3748');
+                drawHand(ctx, minuteAngle, radius * 0.7, 4, isDark ? '#e2e8f0' : '#2d3748');
+                drawHand(ctx, secondAngle, radius * 0.8, 2, '#ef4444');
+            }
+
+            // Theme change karne ka shortcut, dark ya light
+            function applyTheme(theme) {
+                document.body.className = theme;
+                localStorage.setItem('stopwatchTheme', theme);
+                drawClock();
+            }
+            themeToggle.addEventListener('click', () => {
+                const newTheme = document.body.classList.contains('light') ? 'dark' : 'light';
+                applyTheme(newTheme);
+            });
+
+            // Keyboard shortcuts, thoda pro feel aata hai
+            document.addEventListener('keydown', (e) => {
+                if (e.target.tagName === 'BUTTON') return;
+                if (e.code === 'Space') {
+                    e.preventDefault();
+                    if (timerInterval) pauseTimer(); else startTimer();
+                } else if (e.code === 'KeyL' && !lapBtn.disabled) {
+                    recordLap();
+                } else if (e.code === 'KeyR') {
+                    resetTimer();
+                }
+            });
+
+            // Sare buttons ko unke kaam pe laga do
+            startBtn.addEventListener('click', startTimer);
+            pauseBtn.addEventListener('click', pauseTimer);
+            resetBtn.addEventListener('click', resetTimer);
+            lapBtn.addEventListener('click', recordLap);
+            exportBtn.addEventListener('click', exportLapsToCSV);
+
+            // Theme yaad rakhne ka jugaad
+            const savedTheme = localStorage.getItem('stopwatchTheme') || 'light';
+            applyTheme(savedTheme);
+            drawClock();
+        });
+    </script>
+</body>
